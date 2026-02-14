@@ -1,0 +1,14 @@
+{
+    "name": "smart-canteen-system",
+    "version": "1.0.0",
+    "description": "Smart Canteen Management System with Role-Based Access",
+    "scripts": {
+        "dev:frontend": "cd smart-canteen-frontend && npm run dev",
+        "dev:backend": "cd smart-canteen-backend && node server.js",
+        "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+        "install:all": "concurrently \"cd smart-canteen-frontend && npm install\" \"cd smart-canteen-backend && npm install\""
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
+}

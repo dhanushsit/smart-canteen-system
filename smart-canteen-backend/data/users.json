@@ -1,0 +1,46 @@
+[
+  {
+    "id": "1",
+    "name": "Admin User",
+    "email": "admin@canteen.com",
+    "password": "password",
+    "role": "admin",
+    "balance": 0,
+    "coins": 0,
+    "verified": true
+  },
+  {
+    "id": "2",
+    "name": "Student User",
+    "email": "student@canteen.com",
+    "password": "password",
+    "role": "student",
+    "balance": 500,
+    "coins": 0,
+    "verified": true
+  },
+  {
+    "id": "3",
+    "name": "Staff Distributor",
+    "email": "staff@canteen.com",
+    "password": "password",
+    "role": "distributor",
+    "balance": 0,
+    "coins": 0,
+    "verified": true
+  },
+  {
+    "id": "1771045343333",
+    "name": "GG",
+    "email": "mcram2008@gmail.com",
+    "password": "$2b$10$kPebY/XdM3iRnQX15aVB4uGXCqM/2t2Ts4YaUe9eKQiwJDKXkIp/G",
+    "role": "student",
+    "balance": 0,
+    "verified": false,
+    "otp": "$2b$10$cx2zFVbaKoAHExIcvj.S4OfsybhYz30x21uykfXjbQ33ea1H3pqAq",
+    "otpExpiry": 1771045643333,
+    "otpAttempts": 0,
+    "lastOtpResend": 0,
+    "resendCount": 0
+  }
+]

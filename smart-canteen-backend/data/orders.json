@@ -1,0 +1,50 @@
+[
+  {
+    "id": "SAM-20260214-03",
+    "userId": "2",
+    "items": [
+      {
+        "id": 4,
+        "name": "Idli Sambar",
+        "qty": 3,
+        "price": 40
+      }
+    ],
+    "total": 120,
+    "status": "Served",
+    "date": "2026-02-14T05:14:38.068Z",
+    "paymentMode": "Test Mode"
+  },
+  {
+    "id": "SAM-20260214-02",
+    "userId": "2",
+    "items": [
+      {
+        "id": 2,
+        "name": "Vada Pav",
+        "qty": 1,
+        "price": 20
+      }
+    ],
+    "total": 20,
+    "status": "Served",
+    "date": "2026-02-14T03:56:49.613Z",
+    "paymentMode": "Test Mode"
+  },
+  {
+    "id": "SAM-20260214-01",
+    "userId": "2",
+    "items": [
+      {
+        "id": 2,
+        "name": "Vada Pav",
+        "qty": 1,
+        "price": 20
+      }
+    ],
+    "total": 20,
+    "status": "Served",
+    "date": "2026-02-14T03:53:56.050Z",
+    "paymentMode": "Test Mode"
+  }
+]

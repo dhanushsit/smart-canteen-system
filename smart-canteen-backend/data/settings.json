@@ -1,0 +1,6 @@
+{
+  "breakfast": true,
+  "lunch": false,
+  "dinner": false,
+  "snacks": true
+}
