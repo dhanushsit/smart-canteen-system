@@ -1,76 +1,118 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../utils/db');
+const supabase = require('../utils/supabaseClient');
+const bcrypt = require('bcryptjs');
 
 // Get all users
-router.get('/', (req, res) => {
-    const users = db.users.getAll().map(u => {
-        const { password, ...userWithoutPassword } = u;
-        return userWithoutPassword;
-    });
-    res.json(users);
+router.get('/', async (req, res) => {
+    try {
+        const { data: users, error } = await supabase
+            .from('users')
+            .select('*');
+
+        if (error) throw error;
+
+        // Strip passwords
+        const sanitizedUsers = users.map(u => {
+            const { password, ...userWithoutPassword } = u;
+            return userWithoutPassword;
+        });
+
+        res.json(sanitizedUsers);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching users', error: err.message });
+    }
 });
 
 // Create user
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     const { name, email, password, role, balance } = req.body;
-    let users = db.users.getAll();
 
-    if (users.find(u => u.email === email)) {
-        return res.status(400).json({ message: 'User already exists' });
+    try {
+        // Check if email already exists
+        const { data: existingUser, error: searchError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('email', email)
+            .maybeSingle();
+
+        if (existingUser) {
+            return res.status(400).json({ message: 'User already exists' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const newUser = {
+            id: crypto.randomUUID(),
+            name,
+            email,
+            password: hashedPassword,
+            role: role || 'student',
+            balance: parseFloat(balance) || 0,
+            verified: true
+        };
+
+        const { data, error } = await supabase
+            .from('users')
+            .insert([newUser])
+            .select();
+
+        if (error) throw error;
+
+        // Remove password from response
+        const { password: _, ...userResponse } = data[0];
+        res.status(201).json(userResponse);
+    } catch (err) {
+        res.status(500).json({ message: 'Error creating user', error: err.message });
     }
-
-    const newUser = {
-        id: (users.length + 1).toString(),
-        name,
-        email,
-        password, // In real app, hash this
-        role: role || 'student',
-        balance: parseFloat(balance) || 0,
-
-    };
-
-    db.users.create(newUser);
-    res.status(201).json(newUser);
 });
 
 // Update user
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { name, email, role, balance } = req.body;
 
-    let users = db.users.getAll();
-    const userIndex = users.findIndex(u => u.id === id);
+    try {
+        const updates = {};
+        if (name) updates.name = name;
+        if (email) updates.email = email;
+        if (role) updates.role = role;
+        if (balance !== undefined) updates.balance = parseFloat(balance);
 
-    if (userIndex === -1) {
-        return res.status(404).json({ message: 'User not found' });
+        const { data, error } = await supabase
+            .from('users')
+            .update(updates)
+            .eq('id', id)
+            .select();
+
+        if (error) throw error;
+        if (data.length === 0) return res.status(404).json({ message: 'User not found' });
+
+        const { password: _, ...userResponse } = data[0];
+        res.json(userResponse);
+    } catch (err) {
+        res.status(500).json({ message: 'Error updating user', error: err.message });
     }
-
-    users[userIndex] = {
-        ...users[userIndex],
-        name: name || users[userIndex].name,
-        email: email || users[userIndex].email,
-        role: role || users[userIndex].role,
-        balance: balance !== undefined ? parseFloat(balance) : users[userIndex].balance,
-
-    };
-
-    db.users.save(users);
-    res.json(users[userIndex]);
 });
 
 // Delete user
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     const { id } = req.params;
-    let users = db.users.getAll();
-    const filteredUsers = users.filter(u => u.id !== id);
 
-    if (users.length === filteredUsers.length) {
-        return res.status(404).json({ message: 'User not found' });
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .delete()
+            .eq('id', id)
+            .select();
+
+        if (error) throw error;
+        if (data.length === 0) return res.status(404).json({ message: 'User not found' });
+
+        res.json({ message: 'User deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error deleting user', error: err.message });
     }
-
-    db.users.save(filteredUsers);
-    res.json({ message: 'User deleted successfully' });
 });
 
 module.exports = router;

@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 // Local Development URL (Default)
-// const API_URL = 'http://localhost:5000/api';
+const API_URL = 'http://localhost:5000/api';
 
 // Remote Tunnel URL (For Mobile/External Access)
-const API_URL = 'https://green-comics-occur.loca.lt/api';
+// const API_URL = 'https://green-comics-occur.loca.lt/api';
 
 
 const api = axios.create({

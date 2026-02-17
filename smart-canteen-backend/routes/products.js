@@ -1,96 +1,119 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../utils/db');
+const supabase = require('../utils/supabaseClient');
 
 // Get all products
-router.get('/', (req, res) => {
-    const products = db.products.getAll();
-    res.json(products);
+router.get('/', async (req, res) => {
+    try {
+        const { data: products, error } = await supabase
+            .from('products')
+            .select('*')
+            .order('id', { ascending: true });
+
+        if (error) throw error;
+        res.json(products);
+    } catch (err) {
+        res.status(500).json({ message: 'Error fetching products', error: err.message });
+    }
 });
 
 // Create a new product
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
     const { name, price, category, image, stock } = req.body;
 
     if (!name || price === undefined || !category) {
         return res.status(400).json({ message: 'Name, price, and category are required' });
     }
 
-    const products = db.products.getAll();
-    const newProduct = {
-        id: products.length > 0 ? Math.max(...products.map(p => p.id)) + 1 : 1,
-        name,
-        price: parseFloat(price),
-        category,
-        image: image || '',
-        stock: parseInt(stock) || 0
-    };
+    try {
+        const newProduct = {
+            id: crypto.randomUUID(),
+            name,
+            price: parseFloat(price),
+            category,
+            image: image || '',
+            stock: parseInt(stock) || 0
+        };
 
-    products.push(newProduct);
-    db.products.save(products);
+        const { data, error } = await supabase
+            .from('products')
+            .insert([newProduct])
+            .select();
 
-    res.status(201).json(newProduct);
+        if (error) throw error;
+        res.status(201).json(data[0]);
+    } catch (err) {
+        res.status(500).json({ message: 'Error creating product', error: err.message });
+    }
 });
 
 // Update a product
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { name, price, category, image, stock } = req.body;
 
-    let products = db.products.getAll();
-    const productIndex = products.findIndex(p => p.id == id);
+    try {
+        const updates = {};
+        if (name) updates.name = name;
+        if (price !== undefined) updates.price = parseFloat(price);
+        if (category) updates.category = category;
+        if (image !== undefined) updates.image = image;
+        if (stock !== undefined) updates.stock = parseInt(stock);
 
-    if (productIndex === -1) {
-        return res.status(404).json({ message: 'Product not found' });
+        const { data, error } = await supabase
+            .from('products')
+            .update(updates)
+            .eq('id', id)
+            .select();
+
+        if (error) throw error;
+        if (data.length === 0) return res.status(404).json({ message: 'Product not found' });
+
+        res.json(data[0]);
+    } catch (err) {
+        res.status(500).json({ message: 'Error updating product', error: err.message });
     }
-
-    const updatedProduct = {
-        ...products[productIndex],
-        name: name || products[productIndex].name,
-        price: price !== undefined ? parseFloat(price) : products[productIndex].price,
-        category: category || products[productIndex].category,
-        image: image !== undefined ? image : products[productIndex].image,
-        stock: stock !== undefined ? parseInt(stock) : products[productIndex].stock
-    };
-
-    products[productIndex] = updatedProduct;
-    db.products.save(products);
-
-    res.json(updatedProduct);
 });
 
-// Update stock only (existing route, kept for compatibility)
-router.patch('/:id/stock', (req, res) => {
+// Update stock only
+router.patch('/:id/stock', async (req, res) => {
     const { id } = req.params;
     const { stock } = req.body;
 
-    let products = db.products.getAll();
-    const productIndex = products.findIndex(p => p.id == id);
+    try {
+        const { data, error } = await supabase
+            .from('products')
+            .update({ stock: parseInt(stock) })
+            .eq('id', id)
+            .select();
 
-    if (productIndex === -1) {
-        return res.status(404).json({ message: 'Product not found' });
+        if (error) throw error;
+        if (data.length === 0) return res.status(404).json({ message: 'Product not found' });
+
+        res.json(data[0]);
+    } catch (err) {
+        res.status(500).json({ message: 'Error updating stock', error: err.message });
     }
-
-    products[productIndex].stock = parseInt(stock);
-    db.products.save(products);
-
-    res.json(products[productIndex]);
 });
 
 // Delete a product
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
     const { id } = req.params;
 
-    let products = db.products.getAll();
-    const initialLength = products.length;
-    products = products.filter(p => p.id != id);
+    try {
+        const { data, error } = await supabase
+            .from('products')
+            .delete()
+            .eq('id', id)
+            .select();
 
-    if (products.length === initialLength) {
-        return res.status(404).json({ message: 'Product not found' });
+        if (error) throw error;
+        if (data.length === 0) return res.status(404).json({ message: 'Product not found' });
+
+        res.json({ message: 'Product deleted' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error deleting product', error: err.message });
     }
-
-    db.products.save(products);
-    res.json({ message: 'Product deleted' });
 });
 
 module.exports = router;

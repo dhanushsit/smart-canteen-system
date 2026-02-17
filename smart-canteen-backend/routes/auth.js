@@ -1,21 +1,19 @@
 /**
  * AUTHENTICATION ROUTES
- * Handles user login, registration, and password recovery.
+ * Handles user login, registration, and password recovery via Supabase.
  */
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const db = require('../utils/db');
+const supabase = require('../utils/supabaseClient'); // Import Supabase Client
 const nodemailer = require('nodemailer');
-const crypto = require('crypto');
 
-// Secret key for signing JWT tokens (should be in .env)
+// Secret key for signing JWT tokens
 const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key_here';
 
 /**
  * EMAIL TRANSPORTER SETUP
- * Configure connection to Gmail/SMTP for sending automated emails.
  */
 let transporter;
 const setupTransporter = async () => {
@@ -35,44 +33,44 @@ setupTransporter();
 
 /**
  * POST /api/auth/login
- * Logic: Validates user existence, compares hashed password, and issues a JWT token.
  */
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
 
     try {
-        const users = db.users.getAll();
-        // Case-insensitive search for the user by email
-        const user = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+        // Fetch user from Supabase
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email.toLowerCase())
+            .single();
 
-        if (!user) {
+        if (error || !user) {
             return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        /**
-         * PASSWORD VERIFICATION
-         * Supports plain-text (demo mode) and bcrypt hashes ($2a, $2b, $2y).
-         */
+        // Password Verification
         let passwordMatch = false;
-        const isBcrypt = user.password && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$'));
 
+        // Check for 'password' or '123456' bypass ONLY in known dev environments or if explicitly needed
+        // Ideally, remove this bypass for production security.
         if (password === 'password' || password === '123456') {
-            passwordMatch = true; // Temporary bypass for easy demo testing
-        } else if (isBcrypt) {
-            passwordMatch = await bcrypt.compare(password, user.password);
+            // You might want to remove this bypass for strict production safety
+            // But valid for preserving existing test accounts that use simple passwords
+            passwordMatch = await bcrypt.compare(password, user.password).catch(() => false);
+            if (!passwordMatch) {
+                // Fallback for unhashed legacy passwords (if any exist in transition)
+                passwordMatch = (password === user.password);
+            }
         } else {
-            passwordMatch = (password === user.password);
+            passwordMatch = await bcrypt.compare(password, user.password);
         }
 
         if (!passwordMatch) {
-            console.log(`RESULT: FAILED - Password mismatch for ${email}`);
             return res.status(401).json({ message: 'Invalid email or password' });
         }
 
-        /**
-         * TOKEN GENERATION
-         * Creates a signed token valid for 1 day.
-         */
+        // Token Generation
         const token = jwt.sign(
             { id: user.id, name: user.name, role: user.role, email: user.email },
             JWT_SECRET,
@@ -91,13 +89,13 @@ router.post('/login', async (req, res) => {
             }
         });
     } catch (err) {
+        console.error('Login Error:', err);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 /**
  * POST /api/auth/register
- * Logic: Validates phone/email uniqueness and creates a new verified student account.
  */
 router.post('/register', async (req, res) => {
     const { name, email, phone, password } = req.body;
@@ -109,33 +107,46 @@ router.post('/register', async (req, res) => {
     }
 
     try {
-        const users = db.users.getAll();
+        // Check if email or phone already exists
+        const { data: existingUser, error: searchError } = await supabase
+            .from('users')
+            .select('email, phone')
+            .or(`email.eq.${email.toLowerCase()},phone.eq.${phone}`)
+            .maybeSingle();
 
-        // Check if email already exists
-        if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-            return res.status(400).json({ message: 'An account with this email already exists.' });
+        if (existingUser) {
+            if (existingUser.email === email.toLowerCase()) {
+                return res.status(400).json({ message: 'An account with this email already exists.' });
+            }
+            if (existingUser.phone === phone) {
+                return res.status(400).json({ message: 'An account with this phone number already exists.' });
+            }
         }
 
-        // Check if phone already exists
-        if (users.find(u => u.phone === phone)) {
-            return res.status(400).json({ message: 'An account with this phone number already exists.' });
-        }
-
-        // Hash password before saving to DB
+        // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Create User
         const newUser = {
-            id: Date.now().toString(),
+            id: crypto.randomUUID(), // Generate UUID for Supabase
             name,
             email: email.toLowerCase(),
             phone,
             password: hashedPassword,
             role: 'student',
             balance: 0,
-            verified: true // INSTANT VERIFICATION enabled for user convenience
+            verified: true
         };
 
-        db.users.create(newUser);
+        const { error: insertError } = await supabase
+            .from('users')
+            .insert([newUser]);
+
+        if (insertError) {
+            console.error('Supabase Insert Error:', insertError);
+            throw insertError;
+        }
+
         console.log(`New Account Created: ${name} (${email})`);
 
         res.status(201).json({
@@ -150,48 +161,35 @@ router.post('/register', async (req, res) => {
 
 /**
  * POST /api/auth/reset-password
- * Logic: Simple direct password update for recovery.
  */
 router.post('/reset-password', async (req, res) => {
-    console.log('--- PASSWORD RESET ATTEMPT ---');
     const { email, newPassword, confirmPassword } = req.body;
     const cleanEmail = email?.trim().toLowerCase();
 
-    if (!cleanEmail) {
-        return res.status(400).json({ message: "Email is required." });
+    if (!cleanEmail || !newPassword || newPassword !== confirmPassword) {
+        return res.status(400).json({ message: "Invalid request data." });
     }
 
-    if (newPassword !== confirmPassword) {
-        return res.status(400).json({ message: "Passwords do not match." });
-    }
-
-    if (!newPassword || newPassword.length < 6) {
+    if (newPassword.length < 6) {
         return res.status(400).json({ message: "Password must be at least 6 characters." });
     }
 
-    let users = db.users.getAll();
-    const userIndex = users.findIndex(u => u.email.toLowerCase() === cleanEmail);
-
-    if (userIndex === -1) {
-        console.log(`RESULT: FAILED - Reset attempt for non-existent email: ${cleanEmail}`);
-        return res.status(404).json({ message: "No account found with this email." });
-    }
-
     try {
-        console.log(`Hashing new password for ${cleanEmail}...`);
         const hashedPassword = await bcrypt.hash(newPassword, 10);
-        users[userIndex].password = hashedPassword;
 
-        // Save the updated user list back to the local database file
-        const saved = db.users.save(users);
-        if (saved) {
-            console.log(`✅ PASSWORD RESET SUCCESSFUL FOR: ${cleanEmail}`);
-            res.json({ message: "Password reset successful! You can now login." });
-        } else {
-            throw new Error("Disk Write Failed");
+        const { data, error } = await supabase
+            .from('users')
+            .update({ password: hashedPassword })
+            .eq('email', cleanEmail)
+            .select();
+
+        if (error || data.length === 0) {
+            return res.status(404).json({ message: "No account found with this email." });
         }
+
+        res.json({ message: "Password reset successful! You can now login." });
     } catch (err) {
-        console.error('CRITICAL RESET ERROR:', err);
+        console.error('Reset Error:', err);
         res.status(500).json({ message: "Reset failed. Please try again." });
     }
 });
