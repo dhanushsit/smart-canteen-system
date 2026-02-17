@@ -1,10 +1,10 @@
 import axios from 'axios';
 
 // Local Development URL (Default)
-const API_URL = 'http://localhost:5000/api';
+// const API_URL = 'http://localhost:5000/api';
 
-// Remote Tunnel URL (For Mobile/External Access)
-// const API_URL = 'https://green-comics-occur.loca.lt/api';
+// Production URL (Vercel Backend)
+const API_URL = 'https://smart-canteen-system-tawny.vercel.app/api';
 
 
 const api = axios.create({
